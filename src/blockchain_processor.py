@@ -182,7 +182,11 @@ class BlockchainProcessor(Processor):
             "nonce": b.get('nonce'),
         }
 
-    def get_header(self, height):
+    def get_header_from_hash(self, block_hash):
+        b = self.bitcoind('getblock', (block_hash,))
+        return self.block2header(b)
+
+    def get_header_from_height(self, height):
         block_hash = self.bitcoind('getblockhash', (height,))
         b = self.bitcoind('getblock', (block_hash,))
         return self.block2header(b)
@@ -432,7 +436,7 @@ class BlockchainProcessor(Processor):
                 undo = undo_info.pop(txid)
                 self.storage.revert_transaction(txid, tx, block_height, touched_addr, undo)
 
-        if revert: 
+        if revert:
             assert undo_info == {}
 
         # add undo info
@@ -446,7 +450,7 @@ class BlockchainProcessor(Processor):
             self.invalidate_cache(addr)
 
         self.storage.update_hashes()
-        # batch write modified nodes 
+        # batch write modified nodes
         self.storage.batch_write()
         # return length for monitoring
         return len(tx_hashes)
@@ -459,7 +463,7 @@ class BlockchainProcessor(Processor):
             result = self.process(request, cache_only=True)
         except BaseException as e:
             self.push_response(session, {'id': message_id, 'error': str(e)})
-            return 
+            return
 
         if result == -1:
             self.queue.put((session, request))
@@ -509,7 +513,7 @@ class BlockchainProcessor(Processor):
 
 
     def process(self, request, cache_only=False):
-        
+
         message_id = request['id']
         method = request['method']
         params = request.get('params', ())
@@ -554,12 +558,19 @@ class BlockchainProcessor(Processor):
             txi = (txid + int_to_hex4(pos)).decode('hex')
             result = self.storage.get_address(txi)
 
-        elif method == 'blockchain.block.get_header':
+        elif method == 'blockchain.block.get_header_from_height':
             if cache_only:
                 result = -1
             else:
                 height = int(params[0])
-                result = self.get_header(height)
+                result = self.get_header_from_height(height)
+
+        elif method == 'blockchain.block.get_header_from_hash':
+            if cache_only:
+                result = -1
+            else:
+                block_hash = str(params[0])
+                result = self.get_header_from_hash(block_hash)
 
         elif method == 'blockchain.block.get_chunk':
             if cache_only:
@@ -711,7 +722,7 @@ class BlockchainProcessor(Processor):
         self.header = self.block2header(self.bitcoind('getblock', (self.storage.last_hash,)))
         self.header['utxo_root'] = self.storage.get_root_hash().encode('hex')
 
-        if self.shared.stopped(): 
+        if self.shared.stopped():
             print_log( "closing database" )
             self.storage.close()
 
@@ -828,7 +839,7 @@ class BlockchainProcessor(Processor):
             # TODO: update cache here. if new value equals cached value, do not send notification
             self.address_queue.put((address,sessions))
 
-    
+
     def close(self):
         self.blockchain_thread.join()
         print_log("Closing database...")
