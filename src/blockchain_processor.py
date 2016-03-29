@@ -604,9 +604,13 @@ class BlockchainProcessor(Processor):
             tx_height = params[1]
             result = self.get_merkle(tx_hash, tx_height, cache_only)
 
-        elif method == 'blockchain.transaction.get':
+        elif method == 'blockchain.transaction.getRaw':
             tx_hash = params[0]
             result = self.bitcoind('getrawtransaction', (tx_hash, 0))
+
+        elif method == 'blockchain.transaction.get':
+            tx_hash = params[0]
+            result = self.bitcoind('getrawtransaction', (tx_hash, 1))
 
         elif method == 'blockchain.estimatefee':
             num = int(params[0])
